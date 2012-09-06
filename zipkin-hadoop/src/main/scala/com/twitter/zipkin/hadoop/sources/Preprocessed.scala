@@ -36,8 +36,9 @@ class Preprocessed(args : Args) extends Job(args) with DefaultDateRangeJob {
         (left: (List[Annotation], List[BinaryAnnotation]), right: (List[Annotation], List[BinaryAnnotation])) =>
         (left._1 ++ right._1, left._2 ++ right._2)
       }
-    }
-
+    }.write(Tsv("pps.tsv")) 
+    
+/* filter for trace_ids, span_ids */
   val onlyMerge = preprocessed
     .mapTo(('trace_id, 'id, 'parent_id, 'annotations, 'binary_annotations) -> 'span) {
     a : (Long, Long, Long, List[Annotation], List[BinaryAnnotation]) =>
@@ -49,5 +50,5 @@ class Preprocessed(args : Args) extends Job(args) with DefaultDateRangeJob {
           }
           span
       }
-    }.write(PrepNoNamesSpanSource())
+    }.write(PrepNoNamesSpanSource())   
 }
