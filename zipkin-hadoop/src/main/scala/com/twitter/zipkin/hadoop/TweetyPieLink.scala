@@ -37,14 +37,15 @@ class TweetyPieLink(args: Args) extends Job(args) with DefaultDateRangeJob {
     .filter(0) { s : SpanServiceName => s.isSetTrace_id() }
     .mapTo(0 -> ('trace_id, 'parent_id, 'service))
       { s: SpanServiceName => (s.trace_id, s.parent_id, s.service_name ) }
-    .filter('parent_id) {s: String => Option(s)  //Perform null check before filtering.
+/*    .filter('parent_id) {s: String => Option(s)  //Perform null check before filtering.
       .map { _.toLowerCase != "" }
       .getOrElse(false)
     }
     .filter('trace_id) {s: String => Option(s)  //Perform null check before filtering.
       .map { _.toLowerCase != "" }
       .getOrElse(false)
-    }
+    } 
+*/
     .joinWithSmaller('parent_id -> 'id_1, idName, joiner = new LeftJoin)
     .rename(('name_1) -> ('parent_service))
     .discard('id_1)
@@ -52,7 +53,10 @@ class TweetyPieLink(args: Args) extends Job(args) with DefaultDateRangeJob {
   /* Join with the original on parent ID to get the parent's service name */
   //Find all spans that called TP
   val spanInfoWithChildIsTweetyPie = spanInfo
-    .filter('service){s: String => s.toLowerCase == "tweetypie"}
+    .filter('service){s: String => Option(s)  //Perform null check before filtering.
+      .map { _.toLowerCase == "tweetypie" }
+      .getOrElse(false)
+    }
     
   //Go back to the original span list, and find backends that TweetyPie calls
   val spanInfoWithParentIsTweetyPie = spanInfo
