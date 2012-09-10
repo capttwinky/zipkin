@@ -57,16 +57,24 @@ class TweetyPieLink(args: Args) extends Job(args) with DefaultDateRangeJob {
       .map { _.toLowerCase == "tweetypie" }
       .getOrElse(false)
     }
+    .filter('parent_service){s: String => Option(s)  //Perform null check before filtering.
+      .map { _ != "" }
+      .getOrElse(false)
+    }
     
   //Go back to the original span list, and find backends that TweetyPie calls
   val spanInfoWithParentIsTweetyPie = spanInfo
     //.joinWithSmaller('parent_id -> 'id_1, idName, joiner = new LeftJoin)
-    .filter('parent_service) {s: String => Option(s)  //Perform null check before filtering.
+   .filter('parent_service) {s: String => Option(s)  //Perform null check before filtering.
       .map { _.toLowerCase == "tweetypie" }
       .getOrElse(false)
     }
-    .rename(('trace_id, 'service) -> ('trace_id_2, 'called_service))
-    .discard('parent_id, 'parent_service)
+   .filter('service){s: String => Option(s)  //Perform null check before filtering.
+      .map { _ != "" }
+      .getOrElse(false)
+    }
+   .rename(('trace_id, 'service) -> ('trace_id_2, 'called_service))
+   .discard('parent_id, 'parent_service)
 
   //Join the 'called by' and 'called' services by span ID
   val tweetypieJoin = spanInfoWithChildIsTweetyPie
