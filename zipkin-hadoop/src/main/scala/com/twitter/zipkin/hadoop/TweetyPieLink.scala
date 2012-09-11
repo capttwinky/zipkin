@@ -78,8 +78,8 @@ class TweetyPieLink(args: Args) extends Job(args) with DefaultDateRangeJob {
 
   //Join the 'called by' and 'called' services by span ID
   val tweetypieJoin = spanInfoWithChildIsTweetyPie
-      .joinWithSmaller('trace_id -> 'trace_id_2, spanInfoWithParentIsTweetyPie, joiner = new OuterJoin)
-      .project('trace_id, 'parent_service, 'called_service)
-      .groupBy('trace_id, 'parent_service, 'called_service){_.size}
+      .joinWithSmaller('trace_id -> 'trace_id_2, spanInfoWithParentIsTweetyPie, joiner = new InnerJoin)
+      .project('parent_service, 'called_service)
+      .groupBy('parent_service, 'called_service){_.size}
       .write(Tsv(args("output")))
 }
