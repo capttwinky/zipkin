@@ -18,6 +18,7 @@ package com.twitter.zipkin.hadoop
 
 import com.twitter.scalding._
 import cascading.pipe.joiner._
+import cascading.pipe.Pipe
 import com.twitter.zipkin.gen.{SpanServiceName, BinaryAnnotation, Span, Annotation}
 import com.twitter.zipkin.hadoop.sources.{PrepTsvSource, PreprocessedSpanSource, Util}
 
@@ -25,11 +26,27 @@ import com.twitter.zipkin.hadoop.sources.{PrepTsvSource, PreprocessedSpanSource,
 * Find out how often callers of TweetyPie end up hitting the backends
 */
 
-class TweetyPieLink(args: Args) extends Job(args) with DefaultDateRangeJob {
+
+class ServiceLink(args: Args) extends Job(args) with DefaultDateRangeJob {
   // TODO: account for possible differences between sent and received service names
+
+	def spanInfoWithPropertyIsService(spanInfo:Pipe,property:Symbol,service_name:String):Pipe = {
+	  spanInfo.filter(property){s: String => Option(s)
+	    .map{_.toLowerCase == service_name.toLowerCase}
+	    .getOrElse(false)
+	  }
+	}
+	
+	def childIsService(spanInfo:Pipe,service_name:String):Pipe = 
+			spanInfoWithPropertyIsService(spanInfo, 'service, service_name)
+			
+	def parentIsService(spanInfo:Pipe,service_name:String):Pipe =
+	  spanInfoWithPropertyIsService(spanInfo, 'parent_service, service_name)
+	  .rename(('trace_id, 'service) -> ('trace_id_2, 'called_service))
+	  .discard('parent_id, 'parent_service)
+	  
   val idName = PrepTsvSource()
     .read
-  
   //Grab span info for this chunk
   val spanInfo = PreprocessedSpanSource()
   .read
@@ -42,26 +59,19 @@ class TweetyPieLink(args: Args) extends Job(args) with DefaultDateRangeJob {
     
   /* Join with the original on parent ID to get the parent's service name */
   //Find all spans that called TP
-  val spanInfoWithChildIsTweetyPie = spanInfo
-    .filter('service){s: String => Option(s)  //Perform null check before filtering.
-      .map { _.toLowerCase == "tweetypie" }
-      .getOrElse(false)
-    }
-    
-  //Go back to the original span list, and find backends that TweetyPie calls
-  val spanInfoWithParentIsTweetyPie = spanInfo
-    //.joinWithSmaller('parent_id -> 'id_1, idName, joiner = new LeftJoin)
-   .filter('parent_service) {s: String => Option(s)  //Perform null check before filtering.
-      .map { _.toLowerCase == "tweetypie" }
-      .getOrElse(false)
-    }
-   .rename(('trace_id, 'service) -> ('trace_id_2, 'called_service))
-   .discard('parent_id, 'parent_service)
-
-  //Join the 'called by' and 'called' services by span ID
-  val tweetypieJoin = spanInfoWithChildIsTweetyPie
-      .joinWithSmaller('trace_id -> 'trace_id_2, spanInfoWithParentIsTweetyPie, joiner = new OuterJoin)
-      .project('parent_service, 'called_service)
-      .groupBy('parent_service, 'called_service){_.size}
-      .write(Tsv(args("output")))
+  def makeServiceLink(service_name:String) =
+  	{
+    	val spanChild = childIsService(spanInfo, service_name)
+    	//Go back to the original span list, and find backends that TweetyPie calls
+    	val spanParent = parentIsService(spanInfo, service_name)
+    	//Join the 'called by' and 'called' services by span ID
+    	val serviceJoin = spanChild
+	    	.joinWithSmaller('trace_id -> 'trace_id_2, spanParent, joiner = new OuterJoin)
+	    	.project('parent_service, 'called_service)
+	    	.groupBy('parent_service, 'called_service){_.size}
+	    	.write(Tsv(args("output")+'/'+service_name))
+  	}
+  makeServiceLink("tweetypie")
+  makeServiceLink("gizmoduck")
+  makeServiceLink("timelineservice")
 }
